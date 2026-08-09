@@ -1,0 +1,170 @@
+---
+title: "Linear Discriminant Analysis: Derivation, Intuition, and a Real Failure"
+description: "PCA maximizes variance without labels. LDA uses class membership to find the direction that best separates means relative to within-class spread. Both are derived from first principles, and then LDA fails on real clinical data — for a specific, structural reason."
+pubDate: 2026-08-10
+draft: false
+---
+
+import PCAScatter from '../../components/PCAScatter.astro';
+import LDAClassBuilder from '../../components/LDAClassBuilder.astro';
+
+## 1. Recall PCA
+
+Start with $n$ observations $x_1, \ldots, x_n \in \mathbb{R}^p$. Center them by subtracting the sample mean $\mu = \frac{1}{n}\sum_{i=1}^n x_i$. Define the scatter matrix:
+
+$$S = \sum_{i=1}^n (x_i - \mu)(x_i - \mu)^\top$$
+
+PCA asks: along which unit vector $w$ does the projected data have the most spread? The projected variance is
+
+$$\text{Var}(w^\top x) = w^\top S w$$
+
+(verify by expanding $\sum_i (w^\top(x_i - \mu))^2 = w^\top(\sum_i(x_i-\mu)(x_i-\mu)^\top)w = w^\top S w$). We constrain $\|w\| = 1$ to fix the scale, giving the constrained optimization:
+
+$$\max_{w} \; w^\top S w \quad \text{subject to} \quad w^\top w = 1$$
+
+Introduce a Lagrange multiplier $\lambda$ and form:
+
+$$\mathcal{L}(w, \lambda) = w^\top S w - \lambda(w^\top w - 1)$$
+
+Setting $\partial \mathcal{L}/\partial w = 0$:
+
+$$2Sw - 2\lambda w = 0 \implies Sw = \lambda w$$
+
+The optimum is an eigenvector of $S$. The objective value at the optimum is $w^\top Sw = w^\top(\lambda w) = \lambda$, so the maximum projected variance equals the eigenvalue. **PC1** is the eigenvector corresponding to the largest eigenvalue; **PC2**, the second largest; and so on.
+
+### Closed-form solution in two dimensions
+
+When $p = 2$ and $S = \begin{pmatrix} a & b \\ b & d \end{pmatrix}$, the characteristic equation $\det(S - \lambda I) = 0$ gives:
+
+$$\lambda_{1,2} = \frac{a+d}{2} \pm \sqrt{\left(\frac{a-d}{2}\right)^2 + b^2}$$
+
+The eigenvector for $\lambda_1$ satisfies $(a - \lambda_1)v_x + b\, v_y = 0$, so it is proportional to $(b,\; \lambda_1 - a)$ — normalise to get a unit vector. PC2 is perpendicular.
+
+The widget below uses exactly this formula, updated after every click.
+
+<PCAScatter />
+
+Note what this derivation did not use: class membership. The labels $y_1, \ldots, y_n$ appear nowhere. PCA maximizes spread; it is blind to which observations belong to the same group.
+
+---
+
+## 2. LDA, two classes
+
+Now suppose $y_i \in \{1, 2\}$. Let $\mathcal{C}_k$ be the index set for class $k$, $N_k = |\mathcal{C}_k|$, and $\mu_k = \frac{1}{N_k}\sum_{i \in \mathcal{C}_k} x_i$.
+
+Projecting onto $w$ maps each $x_i$ to a scalar $z_i = w^\top x_i$, and each class mean to $\tilde{\mu}_k = w^\top \mu_k$.
+
+**First attempt:** maximize the squared distance between projected means,
+
+$$\max_w \; |w^\top(\mu_1 - \mu_2)|^2$$
+
+This fails in two ways. Without a norm constraint the objective is unbounded. With $\|w\|=1$ it still ignores within-class scatter: a direction that pulls means far apart but leaves both classes smeared across the axis is useless for discrimination.
+
+**Fisher's correction:** normalize the between-class separation by the total within-class scatter. Define the within-class scatter matrices:
+
+$$S_k = \sum_{i \in \mathcal{C}_k} (x_i - \mu_k)(x_i - \mu_k)^\top, \qquad S_W = S_1 + S_2$$
+
+and the between-class scatter matrix:
+
+$$S_B = (\mu_1 - \mu_2)(\mu_1 - \mu_2)^\top$$
+
+Note that $w^\top S_B w = (w^\top(\mu_1 - \mu_2))^2$ — the squared separation of projected means — and $w^\top S_W w$ is the total projected within-class variance. Fisher's criterion is the ratio of these:
+
+$$J(w) = \frac{w^\top S_B w}{w^\top S_W w}$$
+
+A direction with large $J$ separates the class means by much more than the within-class spread along the same direction.
+
+---
+
+## 3. Fisher's linear discriminant
+
+To find the $w$ that maximizes $J$, differentiate with respect to $w$ and set to zero. Writing $\beta = w^\top S_B w$ and $\gamma = w^\top S_W w$:
+
+$$\frac{\partial J}{\partial w} = \frac{2 S_B w \cdot \gamma - 2 S_W w \cdot \beta}{\gamma^2} = 0$$
+
+Rearranging:
+
+$$S_B w = \frac{\beta}{\gamma} S_W w = J(w)\, S_W w$$
+
+This is the **generalized eigenvalue problem** $S_B w = \lambda S_W w$, where $\lambda = J(w)$ at the optimum.
+
+For two classes, $S_B = (\mu_1 - \mu_2)(\mu_1 - \mu_2)^\top$ has rank one, so $S_B w = (\mu_1 - \mu_2)[(\mu_1 - \mu_2)^\top w]$ is always proportional to $(\mu_1 - \mu_2)$. The generalized eigenvalue problem reduces to:
+
+$$(\mu_1 - \mu_2)^\top w \cdot (\mu_1 - \mu_2) = \lambda\, S_W w$$
+
+The scalar $(\mu_1 - \mu_2)^\top w$ does not affect the direction of $w$, so:
+
+$$\boxed{w^* \propto S_W^{-1}(\mu_1 - \mu_2)}$$
+
+In two dimensions, if $S_W = \begin{pmatrix} a & b \\ b & d \end{pmatrix}$, the inverse is:
+
+$$S_W^{-1} = \frac{1}{ad - b^2} \begin{pmatrix} d & -b \\ -b & a \end{pmatrix}$$
+
+**Comparison with PCA.** The PCA direction is the top eigenvector of the full scatter matrix $S_1 + S_2 + N_1(\mu_1 - \mu)(\mu_1-\mu)^\top + N_2(\mu_2-\mu)(\mu_2-\mu)^\top$. It maximizes total variance irrespective of class structure. The LDA direction $S_W^{-1}(\mu_1 - \mu_2)$ instead corrects for within-class geometry: if $S_W = I$ (both classes spherically symmetric with equal spread), then $w^* \propto \mu_1 - \mu_2$ — the direction straight from one mean to the other. If $S_W \neq I$, the inverse covariance stretches and rotates that difference to account for correlated or unequally scaled features.
+
+---
+
+## 4. Seeing LDA work — and fail
+
+Use the widget below. Add a cluster of class 1 points with CLASS 1 active, then switch to CLASS 2 and add points in a clearly separated region. The solid line shows $w^* = S_W^{-1}(\mu_1 - \mu_2)$ — the LDA axis. The dashed line shows the PCA direction of the combined cloud. The $\times$ marks are the class means.
+
+<LDAClassBuilder />
+
+With well-separated, roughly symmetric clusters, LDA finds a sensible discriminant and the two lines diverge as expected: PCA tracks total spread, LDA tracks inter-class separation.
+
+Now try to break it. Give class 1 a tight cluster in the upper left. Give class 2 **two sub-clusters** — one in the lower left, one in the upper right, so that they form an "X" pattern with class 1 in the middle. The class 2 mean falls somewhere between those sub-clusters, possibly right on top of the class 1 cluster. Watch the LDA axis try to separate that ghost mean from class 1. It cannot: there is no single linear projection that distinguishes the two groups when the positive class is bimodal.
+
+This is not a contrived failure. It is a faithful model of what happens when the positive class contains clinically distinct subgroups.
+
+---
+
+## 5. Assumptions and where LDA fails in practice
+
+### The Gaussian-likelihood assumption
+
+LDA's theoretical underpinning is that each class is drawn from a multivariate normal distribution with a shared covariance matrix. Under that model, the Bayes-optimal decision rule is a linear function of $x$, and LDA recovers it. Violate the model assumptions and the guarantee collapses.
+
+Real-world feature sets routinely contain:
+
+- **Binary indicators** — features that take only values 0 and 1, for which no Gaussian model is appropriate;
+- **Sparse counts** — features whose distribution is concentrated at zero with a long right tail;
+- **Zero-inflated data** — a mix of structural zeros and a positive process, producing bimodal marginals;
+- **Skew and outliers** — heavy-tailed distributions where the mean is not a reliable center;
+- **Nonlinear relationships** — interactions between features that a linear projection cannot capture.
+
+Non-normality alone rarely kills LDA outright; the method is often robust to moderate departures. The deeper problem is structural.
+
+### The $C-1$ component ceiling
+
+For $C$ classes, the between-class scatter matrix $S_B = \sum_k N_k(\mu_k - \mu)(\mu_k - \mu)^\top$ has rank at most $C - 1$. For two-class problems, LDA produces **exactly one** discriminant component:
+
+$$z = w^\top x$$
+
+A single scalar summarizes the entire observation. This is by design — one dimension is all the supervision can support with two classes. The question is whether one dimension is enough to express the discriminative structure.
+
+### Phenotype heterogeneity: the structural failure
+
+Consider a binary patient-identification problem. The positive class contains two clinically distinct groups:
+
+- **Group A:** high cardiac involvement, low respiratory involvement.
+- **Group B:** low cardiac involvement, high respiratory involvement.
+
+These groups arrive at the positive label by different routes. Their mean — moderate cardiac, moderate respiratory — describes neither of them accurately. LDA computes $w^* = S_W^{-1}(\mu_1 - \mu_2)$, where $\mu_1$ is this uninformative average. The discriminant axis is anchored to a point that no positive patient actually resembles.
+
+In a feature space of claims codes, Group A might have high ICD codes for heart failure and low codes for COPD; Group B, the reverse. A linear projection that moves toward "high cardiac, low respiratory" scores Group A well and Group B poorly, or vice versa. There is no single direction in feature space that scores both groups above the negative class — unless the negative class happens to be located centrally in a way that makes it work by accident.
+
+PCA, being unsupervised, is not immune to this problem. But it is also not subject to it in the same way. If the first PC aligns with cardiac involvement, it separates Group A from negatives along that axis. A subsequent PC may recover Group B. Without the constraint of a single supervised direction, PCA can represent the heterogeneity in its top components and leave classification to a downstream model trained on those components.
+
+### Coefficient interpretation caveats
+
+Even when LDA works correctly, the components of $w^*$ carry interpretation traps:
+
+**Correlated features.** If two features $x_j$ and $x_k$ are highly correlated (both measuring similar clinical activity), their individual coefficients may be small, opposite in sign, or unstable across samples — even though together they are discriminative. The coefficient on $x_j$ reflects its marginal contribution conditional on $x_k$ being in the model, not its standalone importance.
+
+**Scaling sensitivity.** LDA operates on raw feature values. A feature measured in thousands (e.g., total claims dollars) will have a smaller coefficient than one measured in units (e.g., a count), even if their discriminative power is comparable. Coefficient magnitude should not be compared across features unless they have been standardized.
+
+**Conditional, not causal, contribution.** The sign and magnitude of a coefficient reflect how the feature moves an observation along the discriminant axis — a statistical association given the training data. It does not identify causal drivers of class membership.
+
+**One axis, many routes.** For any $C-1$ components, LDA imposes a fixed low-dimensional summary. When the positive class contains several phenotypic subtypes with distinct feature profiles, that summary cannot represent all of them. The coefficient on a feature that is elevated only in Group A will be attenuated by the Group B observations for which it is not elevated. Both the direction and the coefficients become descriptions of neither subgroup.
+
+These are not reasons to avoid LDA. They are reasons to inspect the within-class structure before committing to a single supervised projection, and to treat coefficient magnitudes as statistical summaries rather than scientific findings.

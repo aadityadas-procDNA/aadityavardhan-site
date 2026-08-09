@@ -1,0 +1,371 @@
+---
+---
+
+<div class="lda-widget">
+  <div class="toolbar">
+    <span class="label">Active class:</span>
+    <button class="class-btn active" data-cls="1" type="button">Class 1</button>
+    <button class="class-btn" data-cls="2" type="button">Class 2</button>
+    <button class="reset-btn" type="button">Reset</button>
+    <span class="readout" aria-live="polite">
+      w* = (<span class="wx-val">—</span>,&thinsp;<span class="wy-val">—</span>)
+    </span>
+  </div>
+  <canvas
+    class="lda-canvas"
+    aria-label="Scatter plot with class 1 (blue) and class 2 (orange) points. Shows LDA discriminant axis as a solid line and PCA axis as a dashed line."
+  ></canvas>
+  <div class="legend">
+    <span class="leg-lda">&#8212; LDA axis</span>
+    <span class="leg-pca">&#8213; PCA axis (combined)</span>
+    <span class="leg-sep"></span>
+    <span class="leg-note">Click canvas to add a point to the active class</span>
+  </div>
+</div>
+
+<style>
+  .lda-widget {
+    border: 1px solid var(--color-widget-border);
+    border-radius: 2px;
+    margin: 2.5rem 0;
+    overflow: hidden;
+    font-family: var(--font-ui);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--color-widget-border);
+    background: var(--color-surface);
+    font-size: 0.7rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+  }
+
+  .class-btn,
+  .reset-btn {
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    color: var(--color-text-muted);
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+    line-height: 1.5;
+  }
+
+  .reset-btn {
+    color: var(--color-text);
+  }
+
+  .class-btn:hover,
+  .reset-btn:hover {
+    border-color: var(--color-text-muted);
+  }
+
+  .class-btn.active[data-cls="1"] {
+    background: var(--color-data-1);
+    border-color: var(--color-data-1);
+    color: #fff;
+  }
+
+  .class-btn.active[data-cls="2"] {
+    background: var(--color-data-2);
+    border-color: var(--color-data-2);
+    color: #fff;
+  }
+
+  .readout {
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+  }
+
+  .lda-canvas {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    display: block;
+    cursor: crosshair;
+    background: var(--color-widget-bg);
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.4rem 0.75rem;
+    border-top: 1px solid var(--color-widget-border);
+    background: var(--color-surface);
+    font-size: 0.7rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    flex-wrap: wrap;
+  }
+
+  .leg-lda { color: var(--color-data-1); }
+  .leg-pca { color: var(--color-axis); }
+  .leg-sep { flex: 1; }
+  .leg-note { color: var(--color-text-muted); font-style: italic; text-transform: none; letter-spacing: 0; }
+</style>
+
+<script>
+  interface Pt { x: number; y: number }
+
+  const DATA_MIN = -5;
+  const DATA_MAX = 5;
+  const DATA_RANGE = DATA_MAX - DATA_MIN;
+  const PAD = 0.08;
+
+  function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+    const dpr = window.devicePixelRatio ?? 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    return ctx;
+  }
+
+  function cssSize(canvas: HTMLCanvasElement) {
+    const r = canvas.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+
+  function makeMappers(w: number, h: number) {
+    const px = w * PAD, py = h * PAD;
+    const dw = w - 2 * px, dh = h - 2 * py;
+    const toCanvas = (dx: number, dy: number): Pt => ({
+      x: px + (dx - DATA_MIN) / DATA_RANGE * dw,
+      y: py + (DATA_MAX - dy) / DATA_RANGE * dh,
+    });
+    const toData = (cx: number, cy: number): Pt => ({
+      x: DATA_MIN + (cx - px) / dw * DATA_RANGE,
+      y: DATA_MAX - (cy - py) / dh * DATA_RANGE,
+    });
+    return { toCanvas, toData, dw };
+  }
+
+  function meanPt(pts: Pt[]): Pt {
+    const n = pts.length;
+    return { x: pts.reduce((s, p) => s + p.x, 0) / n, y: pts.reduce((s, p) => s + p.y, 0) / n };
+  }
+
+  // Returns [a, b, d] of (unnormalized) scatter matrix
+  function scatter(pts: Pt[], mu: Pt): [number, number, number] {
+    let a = 0, b = 0, d = 0;
+    for (const p of pts) {
+      const dx = p.x - mu.x, dy = p.y - mu.y;
+      a += dx * dx; b += dx * dy; d += dy * dy;
+    }
+    return [a, b, d];
+  }
+
+  function eigen2x2(a: number, b: number, d: number): { lam1: number; v1: Pt; lam2: number; v2: Pt } {
+    const half = (a + d) / 2;
+    const disc = Math.sqrt(Math.max(0, ((a - d) / 2) ** 2 + b * b));
+    const lam1 = half + disc, lam2 = half - disc;
+    const mag = Math.hypot(b, lam1 - a);
+    const v1: Pt = mag > 1e-10 ? { x: b / mag, y: (lam1 - a) / mag } : { x: 1, y: 0 };
+    const v2: Pt = { x: -v1.y, y: v1.x };
+    return { lam1, v1, lam2, v2 };
+  }
+
+  // 2×2 matrix inverse: [[a,b],[c,d]]^-1 = 1/(ad-bc) * [[d,-b],[-c,a]]
+  function inv2x2(a: number, b: number, c: number, d: number): [number,number,number,number] | null {
+    const det = a * d - b * c;
+    if (Math.abs(det) < 1e-10) return null;
+    return [d / det, -b / det, -c / det, a / det];
+  }
+
+  // LDA direction w* ∝ S_W^{-1}(μ₁ - μ₂), or null if singular / no solution
+  function ldaDir(mu1: Pt, s1: [number,number,number], mu2: Pt, s2: [number,number,number]): Pt | null {
+    const a = s1[0] + s2[0], b = s1[1] + s2[1], d = s1[2] + s2[2];
+    const inv = inv2x2(a, b, b, d);
+    if (!inv) return null;
+    const dx = mu1.x - mu2.x, dy = mu1.y - mu2.y;
+    const wx = inv[0] * dx + inv[1] * dy;
+    const wy = inv[2] * dx + inv[3] * dy;
+    const mag = Math.hypot(wx, wy);
+    return mag < 1e-10 ? null : { x: wx / mag, y: wy / mag };
+  }
+
+  // Draw a line spanning the full canvas through point (cx,cy) with data-space direction (vx,vy)
+  function drawFullLine(
+    ctx: CanvasRenderingContext2D,
+    cx: number, cy: number,
+    vx: number, vy: number,  // canvas-space direction (vy already flipped)
+    canvasW: number, canvasH: number,
+    color: string, lw: number, dash: number[] = []
+  ) {
+    // Find t range where line is inside canvas
+    const ts: number[] = [];
+    if (Math.abs(vx) > 1e-10) {
+      ts.push(-cx / vx, (canvasW - cx) / vx);
+    }
+    if (Math.abs(vy) > 1e-10) {
+      ts.push(-cy / vy, (canvasH - cy) / vy);
+    }
+    if (ts.length < 2) return;
+    const valid = ts.filter(t => {
+      const x = cx + t * vx, y = cy + t * vy;
+      return x >= -1 && x <= canvasW + 1 && y >= -1 && y <= canvasH + 1;
+    });
+    if (valid.length < 2) return;
+    const tMin = Math.min(...valid), tMax = Math.max(...valid);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(cx + tMin * vx, cy + tMin * vy);
+    ctx.lineTo(cx + tMax * vx, cy + tMax * vy);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawX(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+    ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function getColors(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const g = (v: string) => cs.getPropertyValue(v).trim();
+    return { bg: g('--color-widget-bg'), d1: g('--color-data-1'), d2: g('--color-data-2'), axis: g('--color-axis') };
+  }
+
+  function init(widget: HTMLElement) {
+    const canvas = widget.querySelector<HTMLCanvasElement>('.lda-canvas')!;
+    const btn1 = widget.querySelector<HTMLButtonElement>('.class-btn[data-cls="1"]')!;
+    const btn2 = widget.querySelector<HTMLButtonElement>('.class-btn[data-cls="2"]')!;
+    const resetBtn = widget.querySelector<HTMLButtonElement>('.reset-btn')!;
+    const wxOut = widget.querySelector<HTMLElement>('.wx-val')!;
+    const wyOut = widget.querySelector<HTMLElement>('.wy-val')!;
+
+    const cls1: Pt[] = [], cls2: Pt[] = [];
+    let active: 1 | 2 = 1;
+
+    btn1.addEventListener('click', () => {
+      active = 1;
+      btn1.classList.add('active');
+      btn2.classList.remove('active');
+    });
+    btn2.addEventListener('click', () => {
+      active = 2;
+      btn2.classList.add('active');
+      btn1.classList.remove('active');
+    });
+    resetBtn.addEventListener('click', () => {
+      cls1.length = 0; cls2.length = 0;
+      wxOut.textContent = '—'; wyOut.textContent = '—';
+      render();
+    });
+
+    function render() {
+      const ctx = setupCanvas(canvas);
+      const { w, h } = cssSize(canvas);
+      const { toCanvas, dw } = makeMappers(w, h);
+      const C = getColors(widget);
+
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(0, 0, w, h);
+
+      // Origin crosshair
+      const O = toCanvas(0, 0);
+      ctx.save();
+      ctx.strokeStyle = C.axis;
+      ctx.globalAlpha = 0.2;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(O.x, 0); ctx.lineTo(O.x, h);
+      ctx.moveTo(0, O.y); ctx.lineTo(w, O.y);
+      ctx.stroke();
+      ctx.restore();
+
+      // PCA on combined cloud
+      const all = [...cls1, ...cls2];
+      if (all.length >= 2) {
+        const mu = meanPt(all);
+        const [sa, sb, sd] = scatter(all, mu);
+        const { v1 } = eigen2x2(sa, sb, sd);
+        const muC = toCanvas(mu.x, mu.y);
+        // canvas direction for v1: (v1.x, -v1.y)
+        drawFullLine(ctx, muC.x, muC.y, v1.x, -v1.y, w, h, C.axis, 1, [5, 5]);
+      }
+
+      // LDA axis
+      if (cls1.length >= 1 && cls2.length >= 1) {
+        const mu1 = meanPt(cls1), mu2 = meanPt(cls2);
+        // Need scatter matrices; if only 1 point in a class, Si = zero matrix
+        const s1: [number,number,number] = cls1.length >= 2 ? scatter(cls1, mu1) : [0, 0, 0];
+        const s2: [number,number,number] = cls2.length >= 2 ? scatter(cls2, mu2) : [0, 0, 0];
+        const w_star = ldaDir(mu1, s1, mu2, s2);
+        if (w_star) {
+          // Combined centroid for line anchor
+          const muAll = meanPt(all);
+          const muC = toCanvas(muAll.x, muAll.y);
+          drawFullLine(ctx, muC.x, muC.y, w_star.x, -w_star.y, w, h, C.d1, 2);
+          wxOut.textContent = w_star.x.toFixed(3);
+          wyOut.textContent = w_star.y.toFixed(3);
+        } else {
+          wxOut.textContent = '—'; wyOut.textContent = '—';
+        }
+
+        // Class mean markers
+        const ppu = dw / DATA_RANGE;
+        const mu1C = toCanvas(mu1.x, mu1.y);
+        const mu2C = toCanvas(mu2.x, mu2.y);
+        drawX(ctx, mu1C.x, mu1C.y, 6, C.d1);
+        drawX(ctx, mu2C.x, mu2C.y, 6, C.d2);
+      } else {
+        wxOut.textContent = '—'; wyOut.textContent = '—';
+      }
+
+      // Points
+      ctx.fillStyle = C.d1;
+      for (const p of cls1) {
+        const cp = toCanvas(p.x, p.y);
+        ctx.beginPath(); ctx.arc(cp.x, cp.y, 4.5, 0, 2 * Math.PI); ctx.fill();
+      }
+      ctx.fillStyle = C.d2;
+      for (const p of cls2) {
+        const cp = toCanvas(p.x, p.y);
+        ctx.beginPath(); ctx.arc(cp.x, cp.y, 4.5, 0, 2 * Math.PI); ctx.fill();
+      }
+    }
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const { w, h } = cssSize(canvas);
+      const { toData } = makeMappers(w, h);
+      const p = toData(e.clientX - rect.left, e.clientY - rect.top);
+      if (p.x > DATA_MIN && p.x < DATA_MAX && p.y > DATA_MIN && p.y < DATA_MAX) {
+        (active === 1 ? cls1 : cls2).push(p);
+        render();
+      }
+    });
+
+    const ro = new ResizeObserver(() => render());
+    ro.observe(widget);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render());
+
+    render();
+  }
+
+  for (const el of document.querySelectorAll<HTMLElement>('.lda-widget')) {
+    init(el);
+  }
+</script>

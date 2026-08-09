@@ -1,0 +1,352 @@
+---
+---
+
+<div class="pca-widget">
+  <div class="toolbar">
+    <span class="label">Click canvas to add points</span>
+    <button class="reset-btn" type="button">Reset</button>
+    <span class="readout" aria-live="polite">
+      PC1:&ensp;<span class="pc1-var">—</span>&emsp;PC2:&ensp;<span class="pc2-var">—</span>
+    </span>
+  </div>
+  <canvas
+    class="scatter-canvas"
+    aria-label="Scatter plot of user-added points. PC1 and PC2 eigenvectors are shown as lines from the centroid."
+  ></canvas>
+  <canvas
+    class="proj-canvas"
+    aria-label="Projection of all points onto the PC1 axis, shown as tick marks on a number line."
+  ></canvas>
+</div>
+
+<style>
+  .pca-widget {
+    border: 1px solid var(--color-widget-border);
+    border-radius: 2px;
+    margin: 2.5rem 0;
+    overflow: hidden;
+    font-family: var(--font-ui);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--color-widget-border);
+    background: var(--color-surface);
+    font-size: 0.7rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .reset-btn {
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    color: var(--color-text);
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+    line-height: 1.5;
+  }
+
+  .reset-btn:hover {
+    border-color: var(--color-text-muted);
+  }
+
+  .readout {
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+  }
+
+  .scatter-canvas {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    display: block;
+    cursor: crosshair;
+    background: var(--color-widget-bg);
+  }
+
+  .proj-canvas {
+    width: 100%;
+    height: 44px;
+    display: block;
+    border-top: 1px solid var(--color-widget-border);
+    background: var(--color-widget-bg);
+    cursor: default;
+  }
+</style>
+
+<script>
+  interface Pt { x: number; y: number }
+
+  const DATA_MIN = -5;
+  const DATA_MAX = 5;
+  const DATA_RANGE = DATA_MAX - DATA_MIN;
+  const PAD = 0.1; // fractional padding on each side
+
+  function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+    const dpr = window.devicePixelRatio ?? 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    return ctx;
+  }
+
+  function cssSize(canvas: HTMLCanvasElement): { w: number; h: number } {
+    const r = canvas.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+
+  function makeMappers(w: number, h: number) {
+    const px = w * PAD;
+    const py = h * PAD;
+    const dw = w - 2 * px;
+    const dh = h - 2 * py;
+
+    const toCanvas = (dx: number, dy: number): Pt => ({
+      x: px + (dx - DATA_MIN) / DATA_RANGE * dw,
+      y: py + (DATA_MAX - dy) / DATA_RANGE * dh,
+    });
+
+    const toData = (cx: number, cy: number): Pt => ({
+      x: DATA_MIN + (cx - px) / dw * DATA_RANGE,
+      y: DATA_MAX - (cy - py) / dh * DATA_RANGE,
+    });
+
+    return { toCanvas, toData, px, py, dw, dh };
+  }
+
+  function mean(pts: Pt[]): Pt {
+    const n = pts.length;
+    return { x: pts.reduce((s, p) => s + p.x, 0) / n, y: pts.reduce((s, p) => s + p.y, 0) / n };
+  }
+
+  // Returns [a, b, d] of scatter matrix [[a,b],[b,d]] (not normalized)
+  function scatter(pts: Pt[], mu: Pt): [number, number, number] {
+    let a = 0, b = 0, d = 0;
+    for (const p of pts) {
+      const dx = p.x - mu.x, dy = p.y - mu.y;
+      a += dx * dx; b += dx * dy; d += dy * dy;
+    }
+    return [a, b, d];
+  }
+
+  function eigen2x2(a: number, b: number, d: number) {
+    const half = (a + d) / 2;
+    const disc = Math.sqrt(Math.max(0, ((a - d) / 2) ** 2 + b * b));
+    const lam1 = half + disc; // larger eigenvalue → PC1
+    const lam2 = half - disc;
+    // Eigenvector for lam1: (S - lam1*I)v = 0  →  (a-lam1)*vx + b*vy = 0
+    // So v ∝ (b, lam1-a); normalise
+    const mag = Math.hypot(b, lam1 - a);
+    const v1: Pt = mag > 1e-10 ? { x: b / mag, y: (lam1 - a) / mag } : { x: 1, y: 0 };
+    const v2: Pt = { x: -v1.y, y: v1.x }; // perpendicular
+    return { lam1, v1, lam2, v2 };
+  }
+
+  function drawSegment(
+    ctx: CanvasRenderingContext2D,
+    x1: number, y1: number, x2: number, y2: number,
+    color: string, lw: number, dash: number[] = []
+  ) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function getColors(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const get = (v: string) => cs.getPropertyValue(v).trim();
+    return {
+      bg: get('--color-widget-bg'),
+      surface: get('--color-surface'),
+      text: get('--color-text'),
+      muted: get('--color-text-muted'),
+      d1: get('--color-data-1'),
+      axis: get('--color-axis'),
+    };
+  }
+
+  function init(widget: HTMLElement) {
+    const sc = widget.querySelector<HTMLCanvasElement>('.scatter-canvas')!;
+    const pc = widget.querySelector<HTMLCanvasElement>('.proj-canvas')!;
+    const resetBtn = widget.querySelector<HTMLButtonElement>('.reset-btn')!;
+    const pc1Out = widget.querySelector<HTMLElement>('.pc1-var')!;
+    const pc2Out = widget.querySelector<HTMLElement>('.pc2-var')!;
+
+    const pts: Pt[] = [];
+
+    function drawScatter() {
+      const ctx = setupCanvas(sc);
+      const { w, h } = cssSize(sc);
+      const { toCanvas, toData, dw } = makeMappers(w, h);
+      const C = getColors(widget);
+
+      // Background
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(0, 0, w, h);
+
+      // Origin crosshair
+      const O = toCanvas(0, 0);
+      ctx.save();
+      ctx.strokeStyle = C.axis;
+      ctx.globalAlpha = 0.25;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(O.x, 0); ctx.lineTo(O.x, h);
+      ctx.moveTo(0, O.y); ctx.lineTo(w, O.y);
+      ctx.stroke();
+      ctx.restore();
+
+      if (pts.length >= 2) {
+        const mu = mean(pts);
+        const [sa, sb, sd] = scatter(pts, mu);
+        const { lam1, v1, lam2, v2 } = eigen2x2(sa, sb, sd);
+        const n = pts.length;
+
+        const muC = toCanvas(mu.x, mu.y);
+        // Scale: std_dev in data units × pixels_per_data_unit
+        const ppu = dw / DATA_RANGE; // pixels per data unit
+        const len1 = Math.sqrt(Math.max(0, lam1 / n)) * ppu;
+        const len2 = Math.sqrt(Math.max(0, lam2 / n)) * ppu;
+
+        // v1 is in data coords (y-up); canvas y-dir is flipped: canvasDir = (v1.x, -v1.y)
+        // Draw PC1 as a line through centroid in both directions
+        drawSegment(ctx,
+          muC.x - v1.x * len1, muC.y + v1.y * len1,
+          muC.x + v1.x * len1, muC.y - v1.y * len1,
+          C.d1, 2
+        );
+
+        // Draw PC2
+        if (len2 > 2) {
+          drawSegment(ctx,
+            muC.x - v2.x * len2, muC.y + v2.y * len2,
+            muC.x + v2.x * len2, muC.y - v2.y * len2,
+            C.axis, 1
+          );
+        }
+
+        // Labels
+        const font = `10px ${getComputedStyle(widget).getPropertyValue('--font-ui').trim() || 'system-ui'}`;
+        ctx.save();
+        ctx.font = font;
+        ctx.letterSpacing = '0.08em';
+        ctx.fillStyle = C.d1;
+        const lp1 = { x: muC.x + v1.x * len1 + 6, y: muC.y - v1.y * len1 + 4 };
+        ctx.fillText('PC1', lp1.x, lp1.y);
+        if (len2 > 2) {
+          ctx.fillStyle = C.axis;
+          const lp2 = { x: muC.x + v2.x * len2 + 6, y: muC.y - v2.y * len2 + 4 };
+          ctx.fillText('PC2', lp2.x, lp2.y);
+        }
+        ctx.restore();
+
+        // Variance readouts
+        const total = lam1 + lam2;
+        pc1Out.textContent = total > 1e-10 ? `${Math.round(100 * lam1 / total)}%` : '—';
+        pc2Out.textContent = total > 1e-10 ? `${Math.round(100 * lam2 / total)}%` : '—';
+      } else {
+        pc1Out.textContent = '—';
+        pc2Out.textContent = '—';
+      }
+
+      // Points (drawn last, on top of eigenvectors)
+      const C2 = getColors(widget);
+      ctx.fillStyle = C2.d1;
+      for (const p of pts) {
+        const cp = toCanvas(p.x, p.y);
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+
+    function drawProj() {
+      const ctx = setupCanvas(pc);
+      const { w, h } = cssSize(pc);
+      const C = getColors(widget);
+
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(0, 0, w, h);
+
+      const midY = h / 2;
+      const leftX = w * 0.06;
+      const rightX = w * 0.94;
+
+      // Axis line
+      drawSegment(ctx, leftX, midY, rightX, midY, C.axis, 1);
+
+      // Axis label
+      ctx.save();
+      ctx.font = `9px ${getComputedStyle(widget).getPropertyValue('--font-ui').trim() || 'system-ui'}`;
+      ctx.letterSpacing = '0.06em';
+      ctx.fillStyle = C.muted;
+      ctx.fillText('PROJECTION ONTO PC1', leftX, h - 5);
+      ctx.restore();
+
+      if (pts.length >= 2) {
+        const mu = mean(pts);
+        const [sa, sb, sd] = scatter(pts, mu);
+        const { v1 } = eigen2x2(sa, sb, sd);
+
+        // Project each point onto PC1 direction
+        const projs = pts.map(p => (p.x - mu.x) * v1.x + (p.y - mu.y) * v1.y);
+        const maxAbs = Math.max(...projs.map(Math.abs), 0.1);
+
+        const toX = (proj: number) => leftX + (proj / maxAbs + 1) / 2 * (rightX - leftX);
+
+        ctx.fillStyle = C.d1;
+        for (const proj of projs) {
+          const cx = toX(proj);
+          ctx.fillRect(cx - 1, midY - 9, 2, 18);
+        }
+      }
+    }
+
+    function render() {
+      drawScatter();
+      drawProj();
+    }
+
+    sc.addEventListener('click', (e) => {
+      const rect = sc.getBoundingClientRect();
+      const { w, h } = cssSize(sc);
+      const { toData } = makeMappers(w, h);
+      const p = toData(e.clientX - rect.left, e.clientY - rect.top);
+      if (p.x > DATA_MIN && p.x < DATA_MAX && p.y > DATA_MIN && p.y < DATA_MAX) {
+        pts.push(p);
+        render();
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      pts.length = 0;
+      render();
+    });
+
+    const ro = new ResizeObserver(() => render());
+    ro.observe(widget);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render());
+
+    render();
+  }
+
+  for (const el of document.querySelectorAll<HTMLElement>('.pca-widget')) {
+    init(el);
+  }
+</script>
