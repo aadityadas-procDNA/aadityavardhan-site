@@ -6,9 +6,9 @@ const posts = await getCollection('blog', ({ data }) => !data.draft);
 posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 ---
 
-<Layout title="Aditya Vardhan Das">
+<Layout title="Aaditya Vardhan Das">
   <main class="index">
-    <h1 class="site-title">Aditya Vardhan Das</h1>
+    <h1 class="site-title">Aaditya Vardhan Das</h1>
     <p class="tagline">Long-form ML articles with interactive derivations.</p>
     <ul class="post-list">
       {posts.map((post) => (
