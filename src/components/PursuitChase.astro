@@ -1,0 +1,292 @@
+---
+---
+
+<div class="chase-widget">
+  <div class="toolbar">
+    <button class="play-btn" type="button">Play</button>
+    <button class="reset-btn" type="button">Reset</button>
+    <span class="readout" aria-live="polite">
+      \u03b8&thinsp;=&thinsp;<span class="theta-out">0.00</span>&thinsp;rad
+      &emsp;
+      R/R\u2080&thinsp;=&thinsp;<span class="r-out">1.000</span>
+      &emsp;
+      rev&thinsp;=&thinsp;<span class="rev-out">0.00</span>
+    </span>
+  </div>
+  <canvas
+    class="chase-canvas"
+    aria-label="Animated pursuit: three particles start at the corners of an equilateral triangle and each chases the next at constant speed. The canvas shows the logarithmic spiral paths traced as the triangle shrinks and rotates, converging to the centroid."
+  ></canvas>
+</div>
+
+<style>
+  .chase-widget {
+    border: 1px solid var(--color-widget-border);
+    border-radius: 2px;
+    margin: 2.5rem 0;
+    overflow: hidden;
+    font-family: var(--font-ui);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--color-widget-border);
+    background: var(--color-surface);
+    font-size: 0.7rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+  }
+
+  .play-btn,
+  .reset-btn {
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    color: var(--color-text);
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+    line-height: 1.5;
+  }
+
+  .play-btn:hover,
+  .reset-btn:hover {
+    border-color: var(--color-text-muted);
+  }
+
+  .readout {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .chase-canvas {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    display: block;
+    background: var(--color-widget-bg);
+  }
+</style>
+
+<script>
+  const SQRT3 = Math.sqrt(3);
+
+  // Initial angles: top (π/2), lower-left (7π/6), lower-right (11π/6)
+  const PHI = [
+    Math.PI / 2,
+    Math.PI / 2 + (2 * Math.PI) / 3,
+    Math.PI / 2 + (4 * Math.PI) / 3,
+  ];
+
+  // Animate from θ=0 to θ=5 rad. At θ=5: R/R₀ = e^{-5√3} ≈ 0.00018
+  const THETA_MAX  = 5;
+  const THETA_RATE = 0.85; // rad/s → ~6 seconds total
+
+  function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+    const dpr = window.devicePixelRatio ?? 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    return ctx;
+  }
+
+  function cssSize(c: HTMLCanvasElement) {
+    const r = c.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+
+  function getColors(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const g = (p: string) => cs.getPropertyValue(p).trim();
+    return {
+      bg:     g('--color-widget-bg'),
+      surface: g('--color-surface'),
+      border:  g('--color-widget-border'),
+      axis:    g('--color-axis'),
+      muted:   g('--color-text-muted'),
+      d1:      g('--color-data-1'),
+    };
+  }
+
+  function particlePos(
+    k: number, theta: number, R0: number, cx: number, cy: number
+  ) {
+    const R   = R0 * Math.exp(-SQRT3 * theta);
+    const ang = PHI[k] + theta;
+    return { x: cx + R * Math.cos(ang), y: cy - R * Math.sin(ang) };
+  }
+
+  function drawFrame(widget: HTMLElement, canvas: HTMLCanvasElement, theta: number) {
+    const ctx = setupCanvas(canvas);
+    const { w, h } = cssSize(canvas);
+    const C = getColors(widget);
+    const uiFont = getComputedStyle(widget).getPropertyValue('--font-ui').trim() || 'system-ui';
+
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2, cy = h / 2;
+    const R0 = Math.min(w, h) * 0.38;
+
+    // Centroid marker
+    ctx.save();
+    ctx.fillStyle = C.axis;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.restore();
+
+    // Faint initial triangle
+    ctx.save();
+    ctx.strokeStyle = C.axis;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.12;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const p = particlePos(k, 0, R0, cx, cy);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    // Spiral trails: sample N points from 0 to theta
+    const N = 220;
+    ctx.save();
+    ctx.strokeStyle = C.d1;
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 0.55;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const th = theta * i / N;
+        const p = particlePos(k, th, R0, cx, cy);
+        i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Current triangle outline
+    const cur = PHI.map((_, k) => particlePos(k, theta, R0, cx, cy));
+    ctx.save();
+    ctx.strokeStyle = C.axis;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    for (const p of cur) ctx.lineTo(p.x, p.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    // Particle dots
+    ctx.fillStyle = C.d1;
+    for (const p of cur) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4.5, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Label on initial triangle vertex (only at start)
+    if (theta < 0.05) {
+      ctx.save();
+      ctx.font = `9px ${uiFont}`;
+      ctx.letterSpacing = '0.07em';
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = 'center';
+      ctx.fillText('initial triangle', cx, cy + R0 + 18);
+      ctx.restore();
+    }
+  }
+
+  function init(widget: HTMLElement) {
+    const canvas  = widget.querySelector<HTMLCanvasElement>('.chase-canvas')!;
+    const playBtn = widget.querySelector<HTMLButtonElement>('.play-btn')!;
+    const resetBtn = widget.querySelector<HTMLButtonElement>('.reset-btn')!;
+    const thetaOut = widget.querySelector<HTMLElement>('.theta-out')!;
+    const rOut     = widget.querySelector<HTMLElement>('.r-out')!;
+    const revOut   = widget.querySelector<HTMLElement>('.rev-out')!;
+
+    let theta = 0;
+    let playing = false;
+    let lastTs: number | null = null;
+    let rafId: number | null = null;
+
+    function updateReadout() {
+      thetaOut.textContent = theta.toFixed(2);
+      rOut.textContent     = Math.exp(-SQRT3 * theta).toFixed(4);
+      revOut.textContent   = (theta / (2 * Math.PI)).toFixed(2);
+    }
+
+    function render() {
+      drawFrame(widget, canvas, theta);
+      updateReadout();
+    }
+
+    function tick(ts: number) {
+      if (lastTs !== null) {
+        theta = Math.min(THETA_MAX, theta + THETA_RATE * (ts - lastTs) / 1000);
+      }
+      lastTs = ts;
+      render();
+      if (playing && theta < THETA_MAX) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        playing = false;
+        playBtn.textContent = 'Play';
+        rafId = null;
+      }
+    }
+
+    function play() {
+      if (theta >= THETA_MAX) theta = 0;
+      playing = true;
+      lastTs = null;
+      playBtn.textContent = 'Pause';
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function pause() {
+      playing = false;
+      playBtn.textContent = 'Play';
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    playBtn.addEventListener('click', () => {
+      playing ? pause() : play();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      pause();
+      theta = 0;
+      render();
+    });
+
+    const ro = new ResizeObserver(() => {
+      if (!playing) render();
+    });
+    ro.observe(widget);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (!playing) render();
+    });
+
+    render();
+  }
+
+  for (const el of document.querySelectorAll<HTMLElement>('.chase-widget')) {
+    init(el);
+  }
+</script>

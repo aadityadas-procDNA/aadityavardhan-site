@@ -1,0 +1,261 @@
+---
+---
+
+<div class="vd-widget">
+  <canvas
+    class="vd-canvas"
+    aria-label="Geometric diagram showing velocity decomposition at one vertex of the equilateral pursuit triangle. The velocity vector toward the next vertex splits into an inward radial component (v cos 30°) and a tangential component (v sin 30°), with the 30° angle between the velocity and the centroid line marked."
+  ></canvas>
+</div>
+
+<style>
+  .vd-widget {
+    border: 1px solid var(--color-widget-border);
+    border-radius: 2px;
+    margin: 2.5rem 0;
+    overflow: hidden;
+    background: var(--color-widget-bg);
+  }
+
+  .vd-canvas {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    display: block;
+  }
+</style>
+
+<script>
+  const SQRT3 = Math.sqrt(3);
+
+  function setupCanvas(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+    const dpr = window.devicePixelRatio ?? 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    return ctx;
+  }
+
+  function cssSize(c: HTMLCanvasElement) {
+    const r = c.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+
+  function getColors(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const g = (p: string) => cs.getPropertyValue(p).trim();
+    return {
+      bg:   g('--color-widget-bg'),
+      axis: g('--color-axis'),
+      muted: g('--color-text-muted'),
+      d1:   g('--color-data-1'),
+      d2:   g('--color-data-2'),
+    };
+  }
+
+  function drawArrow(
+    ctx: CanvasRenderingContext2D,
+    x1: number, y1: number, x2: number, y2: number,
+    color: string, lw: number, dash: number[] = [],
+  ) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    if (dash.length === 0) {
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      const sz = 7;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - sz * Math.cos(ang - 0.42), y2 - sz * Math.sin(ang - 0.42));
+      ctx.lineTo(x2 - sz * Math.cos(ang + 0.42), y2 - sz * Math.sin(ang + 0.42));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function draw(widget: HTMLElement) {
+    const canvas = widget.querySelector<HTMLCanvasElement>('.vd-canvas')!;
+    const ctx = setupCanvas(canvas);
+    const { w, h } = cssSize(canvas);
+    const C = getColors(widget);
+    const uiFont = getComputedStyle(widget).getPropertyValue('--font-ui').trim() || 'system-ui';
+
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w * 0.46;
+    const cy = h * 0.52;
+    const R  = Math.min(w, h) * 0.27;
+
+    // Vertices: V[0]=top (target), V[1]=lower-left (focus), V[2]=lower-right
+    const V = [
+      { x: cx,                 y: cy - R },
+      { x: cx - R * SQRT3 / 2, y: cy + R / 2 },
+      { x: cx + R * SQRT3 / 2, y: cy + R / 2 },
+    ];
+
+    // Triangle
+    ctx.save();
+    ctx.strokeStyle = C.axis;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    for (const v of V) ctx.lineTo(v.x, v.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    // Vertex dots
+    ctx.save();
+    ctx.fillStyle = C.axis;
+    ctx.globalAlpha = 0.55;
+    for (const v of V) {
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Centroid
+    ctx.save();
+    ctx.fillStyle = C.axis;
+    ctx.globalAlpha = 0.65;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.font = `italic 11px ${uiFont}`;
+    ctx.fillStyle = C.muted;
+    ctx.textAlign = 'left';
+    ctx.fillText('O', cx + 6, cy + 5);
+    ctx.restore();
+
+    const V1 = V[1]; // lower-left: the decomposition vertex
+    const V0 = V[0]; // top: target
+
+    // Velocity unit vector V1→V0
+    const vdx = V0.x - V1.x, vdy = V0.y - V1.y;
+    const vdist = Math.hypot(vdx, vdy);
+    const ux = vdx / vdist, uy = vdy / vdist;
+
+    // Centroid unit vector V1→centroid
+    const cdx = cx - V1.x, cdy = cy - V1.y;
+    const cdist = Math.hypot(cdx, cdy);
+    const ucx = cdx / cdist, ucy = cdy / cdist;
+
+    const L = R * 0.84;
+
+    // Projection magnitudes
+    const vr = ux * ucx + uy * ucy;            // ≈ √3/2 = cos 30°
+    const vr_end = { x: V1.x + vr * L * ucx, y: V1.y + vr * L * ucy };
+    const v_tip  = { x: V1.x + L * ux,        y: V1.y + L * uy };
+
+    // Tangential direction (V1→vtip normalized minus v_r component)
+    const vtdx = v_tip.x - vr_end.x, vtdy = v_tip.y - vr_end.y;
+    const vtdist = Math.hypot(vtdx, vtdy);
+    const vtux = vtdx / vtdist, vtuy = vtdy / vtdist;
+
+    // Dashed reference line: V1 toward centroid
+    ctx.save();
+    ctx.strokeStyle = C.axis;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.3;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(V1.x, V1.y);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+    ctx.restore();
+
+    // v_r arrow (data-1, blue)
+    drawArrow(ctx, V1.x, V1.y, vr_end.x, vr_end.y, C.d1, 2.5);
+
+    // v_θ dashed component from vr_end to v_tip (data-2)
+    drawArrow(ctx, vr_end.x, vr_end.y, v_tip.x, v_tip.y, C.d2, 1.5, [5, 3]);
+
+    // Full velocity arrow (data-2, on top)
+    drawArrow(ctx, V1.x, V1.y, v_tip.x, v_tip.y, C.d2, 2.5);
+
+    // Right-angle marker at vr_end
+    const ra = 8;
+    ctx.save();
+    ctx.strokeStyle = C.muted;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(vr_end.x + ra * ucx,            vr_end.y + ra * ucy);
+    ctx.lineTo(vr_end.x + ra * ucx + ra * vtux, vr_end.y + ra * ucy + ra * vtuy);
+    ctx.lineTo(vr_end.x + ra * vtux,            vr_end.y + ra * vtuy);
+    ctx.stroke();
+    ctx.restore();
+
+    // 30° arc at V1
+    const arcR = Math.max(22, R * 0.28);
+    const a_vel = Math.atan2(uy, ux);
+    const a_cen = Math.atan2(ucy, ucx);
+    ctx.save();
+    ctx.strokeStyle = C.muted;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(V1.x, V1.y, arcR, a_vel, a_cen, false);
+    ctx.stroke();
+    ctx.restore();
+
+    // "30°" label at arc midpoint
+    const a_mid = (a_vel + a_cen) / 2;
+    ctx.save();
+    ctx.font = `9px ${uiFont}`;
+    ctx.letterSpacing = '0.04em';
+    ctx.fillStyle = C.muted;
+    ctx.textAlign = 'center';
+    ctx.fillText('30\u00b0', V1.x + (arcR + 14) * Math.cos(a_mid), V1.y + (arcR + 14) * Math.sin(a_mid));
+    ctx.restore();
+
+    // Labels
+    ctx.save();
+    ctx.font = `italic 11px ${uiFont}`;
+    ctx.letterSpacing = '0.02em';
+
+    // "v" at velocity tip
+    ctx.fillStyle = C.d2;
+    ctx.textAlign = 'left';
+    ctx.fillText('v', v_tip.x + 6, v_tip.y - 3);
+
+    // "v_r = v√3/2" along the v_r arrow (offset perpendicular, to the left)
+    const vr_mid = { x: (V1.x + vr_end.x) / 2, y: (V1.y + vr_end.y) / 2 };
+    ctx.font = `9px ${uiFont}`;
+    ctx.fillStyle = C.d1;
+    ctx.textAlign = 'left';
+    // Perpendicular to v_r: rotate (ucx, ucy) by -90° → (ucy, -ucx)
+    const perpx = ucy, perpy = -ucx;
+    ctx.fillText('v\u1D63 = v\u221a3/2', vr_mid.x + 10 * perpx + 4, vr_mid.y + 10 * perpy + 4);
+
+    // "v_θ = v/2" along the dashed component
+    const vt_mid = { x: (vr_end.x + v_tip.x) / 2, y: (vr_end.y + v_tip.y) / 2 };
+    ctx.fillStyle = C.d2;
+    ctx.fillText('v\u03b8 = v/2', vt_mid.x + 10 * (-vtuy) + 4, vt_mid.y + 10 * vtux + 4);
+
+    ctx.restore();
+  }
+
+  function init(widget: HTMLElement) {
+    draw(widget);
+    const ro = new ResizeObserver(() => draw(widget));
+    ro.observe(widget);
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => draw(widget));
+  }
+
+  for (const el of document.querySelectorAll<HTMLElement>('.vd-widget')) {
+    init(el);
+  }
+</script>

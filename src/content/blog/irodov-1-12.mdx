@@ -1,0 +1,120 @@
+---
+title: "Irodov 1.12: Three Particles, One Spiral, and Infinite Revolutions in Finite Time"
+description: "Three particles chase each other from the corners of an equilateral triangle at constant speed v. The meeting time, the spiral paths, and the paradox of infinite rotations in finite time — all from a single symmetry argument."
+pubDate: 2026-08-17
+draft: false
+---
+
+import PursuitChase from '../../components/PursuitChase.astro';
+import VelocityDecomp from '../../components/VelocityDecomp.astro';
+
+## The problem
+
+Three particles sit at the corners of an equilateral triangle with side $a$. Each moves at constant speed $v$ directly toward the next, cyclically. Find the time until they meet and the total path each travels.
+
+It looks like a kinematic bookkeeping problem. It isn't. What makes it stick is that the same answer drops out of three completely different arguments, and each one tells you something the others don't. The third one leads somewhere genuinely strange.
+
+## Symmetry first
+
+Before writing anything down, ask: is particle 1 any different from 2 or 3?
+
+No. The initial configuration has perfect three-fold symmetry, and the rule $1 \to 2 \to 3 \to 1$ preserves it. Whatever happens to side 12 must happen identically to 23 and 31 — there's nothing to break the symmetry.
+
+So the triangle stays equilateral throughout. Three coupled 2D differential equations, six unknowns, collapse to tracking a single number: the side length $s(t)$. This reduction is doing almost all the work.
+
+## The relative-velocity argument
+
+Two particles and a closing rate. The rate of change of the distance between two particles depends only on the component of their relative velocity along the line joining them:
+
+$$\frac{ds}{dt} = (\mathbf{v}_2 - \mathbf{v}_1) \cdot \hat{r}_{21}$$
+
+Particle 1 moves directly toward particle 2, so its contribution along $\hat{r}_{21}$ is $+v$.
+
+Particle 2 moves toward particle 3. The interior angle of an equilateral triangle is $60°$, so the angle between sides 12 and 23 at vertex 2 is $60°$, meaning the angle between the direction $1\to 2$ and the direction $2\to 3$ is $180° - 60° = 120°$. Particle 2's velocity component along $\hat{r}_{21}$ is $v\cos 120° = -v/2$.
+
+$$\frac{ds}{dt} = -v/2 - v = -\frac{3v}{2}$$
+
+Constant. So $s$ decreases linearly:
+
+$$s(t) = a - \frac{3v}{2}\,t$$
+
+Setting $s = 0$:
+
+$$\boxed{t_c = \frac{2a}{3v}}$$
+
+Note that particle 2 isn't running away from particle 1 — it's cutting diagonally toward particle 3. That diagonal contains a component toward particle 1. So the two particles close faster than $v$: both contributions add in the same direction. If you naively thought "particle 1 chases at $v$, it takes $a/v$" you'd be off by a factor of $3/2$.
+
+## The centroid view
+
+There's a second argument that gives more insight into the geometry. Every particle moves toward the next vertex at speed $v$. The key observation is how that velocity splits relative to the centroid.
+
+For an equilateral triangle, the line from a vertex to the centroid makes exactly $30°$ with the adjacent side. So the velocity at every vertex decomposes as:
+
+$$v_r = v\cos 30° = \frac{\sqrt{3}}{2}v \qquad (\text{inward, toward centroid})$$
+$$v_\theta = v\sin 30° = \frac{v}{2} \qquad (\text{tangential})$$
+
+<VelocityDecomp />
+
+The inward component is constant — the triangle stays equilateral so the $30°$ angle never changes. The circumradius $R = s/\sqrt{3}$ therefore shrinks at a constant rate:
+
+$$\dot{R} = -\frac{\sqrt{3}}{2}v$$
+
+Starting from $R_0 = a/\sqrt{3}$:
+
+$$R(t) = \frac{a}{\sqrt{3}} - \frac{\sqrt{3}}{2}v\,t$$
+
+Setting $R = 0$ gives $t_c = 2a/(3v)$ again. Same answer, different road.
+
+But now we also have the tangential component $v_\theta = v/2$, which is rotating the triangle. This sets up the third argument.
+
+## The logarithmic spiral
+
+In polar coordinates about the centroid, both $\dot{R}$ and $R\dot{\theta}$ are known:
+
+$$\dot{R} = -\frac{\sqrt{3}}{2}v \qquad R\dot{\theta} = \frac{v}{2}$$
+
+So $\dot{\theta} = v/(2R)$. Divide the two equations to eliminate time:
+
+$$\frac{d\theta}{dR} = \frac{\dot\theta}{\dot R} = \frac{v/(2R)}{-(\sqrt{3}/2)v} = -\frac{1}{\sqrt{3}\,R}$$
+
+Separate variables: $dR/R = -\sqrt{3}\,d\theta$. Integrate:
+
+$$\ln R = -\sqrt{3}\,\theta + C \implies R = R_0\,e^{-\sqrt{3}\,\theta}$$
+
+A curve that cuts every radial line at a constant angle is a logarithmic spiral. Here the angle is $30°$ at every point — the same $30°$ from the velocity decomposition. The particles trace logarithmic spirals into the centroid.
+
+<PursuitChase />
+
+Press play and watch the triangle shrink and rotate. The spiral trails converge fast — by about $\theta \approx 3$ rad (half a revolution), the radius is less than $2\%$ of its initial value. The trajectories are clean but the convergence is brutal.
+
+## Infinite revolutions, finite time
+
+From $R = R_0\,e^{-\sqrt{3}\,\theta}$: as $R\to 0$, necessarily $\theta\to\infty$. The particles rotate through infinitely many complete revolutions before reaching the centroid.
+
+At the same time, $t_c = 2a/(3v)$ is perfectly finite. So they do it in finite time.
+
+This sounds like a contradiction. It isn't, but the resolution is exactly Zeno's paradox.
+
+Look at the $n$-th revolution. At the start of revolution $n$, the radius is $R_n = R_0\,e^{-2\pi\sqrt{3}\,n}$. The time for that revolution is approximately:
+
+$$\Delta t_n \approx \frac{2\pi R_n}{v_\theta} = \frac{4\pi R_n}{v} = \frac{4\pi R_0}{v}\,e^{-2\pi\sqrt{3}\,n}$$
+
+Each revolution individually takes positive time. If you look at each revolution in isolation and try to conclude something about the total, you'd say: infinitely many positive quantities, infinite sum. But the aggregate does the opposite — the series is geometric with ratio $e^{-2\pi\sqrt{3}} \approx 5 \times 10^{-5}$, and it sums to exactly $t_c$.
+
+This is Zeno's paradox — same structure as Achilles and the tortoise. Infinitely many steps, each taking positive time, yet the sum is finite because the steps shrink fast enough. The time per revolution $\Delta t_n \propto e^{-2\pi\sqrt{3}\,n}$ decays geometrically, and a geometric series with ratio $e^{-2\pi\sqrt{3}} \approx 5\times10^{-5}$ converges hard. The total collapses to $t_c$.
+
+The reason the naive argument fails — "infinitely many positive durations must sum to infinity" — is the same reason it fails for Achilles: successive terms shrink fast enough to overpower the count.
+
+## Total path length
+
+Each particle moves at constant speed $v$ throughout. Total path length:
+
+$$L = v \cdot t_c = v \cdot \frac{2a}{3v} = \frac{2a}{3}$$
+
+Despite spiraling infinitely many times, each particle travels only $2a/3$ — less than the side length. The successive revolutions contribute geometrically less to the total, and the sum closes.
+
+## Why this problem is worth remembering
+
+The symmetry argument turns six coupled nonlinear ODEs into $ds/dt = \text{const}$. That's not a simplification — it's a collapse. Without it, you'd be solving $\dot{\mathbf{r}}_k = v\,(\mathbf{r}_{k+1} - \mathbf{r}_k)/|\mathbf{r}_{k+1} - \mathbf{r}_k|$ numerically and getting a number without the structure.
+
+With it: relative velocity, polar decomposition, logarithmic spirals, and a Zeno-type sum all appear from a single observation that nothing is special about any particle. Irodov puts problems like this early because the habit of checking symmetry before writing equations is more useful than any particular technique.
