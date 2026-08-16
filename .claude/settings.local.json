@@ -15,7 +15,8 @@
       "Bash(node:*)",
       "Bash(curl -s http://localhost:4321/)",
       "Bash(curl -s http://localhost:4321/blog/lda/)",
-      "Bash(python -c ':*)"
+      "Bash(python -c ':*)",
+      "Bash(xxd \"C:\\\\Users\\\\AadityaVardhanDas\\\\my-site\\\\public\\\\favicon.ico\")"
     ]
   }
 }
