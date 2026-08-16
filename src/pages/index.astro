@@ -10,6 +10,18 @@ posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
   <main class="index">
     <h1 class="site-title">Aaditya Vardhan Das</h1>
     <p class="tagline">Personal Canvas - Anything Goes</p>
+
+    <div class="bio">
+      <p>Hi, I'm Aaditya — physics enthusiast turned data scientist, which honestly isn't that big a jump when you think about it.</p>
+      <p>I did my BE in Computer Science from Thapar University, and somewhere along the way got completely hooked on the intersection of math, physics, and machine learning. I still do Kaggle competitions when I have the time, mostly because there's no better way to stress-test your intuitions.</p>
+      <p>Currently I'm a Data Scientist at ProcDNA, where most of my work sits at the intersection of clinical data and ML. The focus is deriving patient-level and HCP-level insights — things like longitudinal event prediction in rare and ultra-rare disease settings (when does a patient switch therapies, when do they drop off, what's the likely next diagnosis). There's also a decent amount of MLOps involved: maintaining batch ML systems on AWS and Databricks, building pipelines that actually survive production.</p>
+      <p>Right now I'm spending a lot of time on two things I find genuinely interesting: agentic AI system design, and what you could call inference engineering — getting large language models to run sensibly on constrained hardware. Both feel like problems where physics intuition actually comes in useful.</p>
+      <div class="bio-links">
+        <a class="resume-link" href="/resume.pdf" download>↓ resume (pdf)</a>
+      </div>
+    </div>
+
+    <p class="section-label">Writing</p>
     <ul class="post-list">
       {posts.map((post) => (
         <li>
@@ -43,7 +55,51 @@ posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
     color: var(--color-text-muted);
     font-family: var(--font-ui);
     font-size: 0.875rem;
-    margin: 0 0 2.5rem;
+    margin: 0 0 2rem;
+  }
+
+  .bio {
+    font-family: var(--font-body);
+    font-size: 0.975rem;
+    line-height: 1.75;
+    color: var(--color-text);
+    border-top: 1px solid var(--color-border);
+    padding-top: 1.75rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .bio p {
+    margin: 0 0 1.1em;
+  }
+
+  .bio-links {
+    margin-top: 1.25rem;
+  }
+
+  .resume-link {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    padding: 0.25em 0.6em;
+  }
+
+  .resume-link:hover {
+    color: var(--color-text);
+    border-color: var(--color-text-muted);
+  }
+
+  .section-label {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    margin: 0 0 0.5rem;
   }
 
   .post-list {
