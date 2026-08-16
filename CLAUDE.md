@@ -22,7 +22,7 @@ result.
 - **Astro** (≥7, Node ≥22.12), static output. No SSR adapter, no server rendering.
 - **MDX** (`@astrojs/mdx`) for articles, so components can be embedded mid-prose.
 - **Vanilla JS + `<canvas>`** for widgets. No React, no D3, no charting library.
-- **KaTeX** via `remark-math` + `rehype-katex` for equations — planned but not yet installed.
+- **KaTeX** loaded via CDN (`cdn.jsdelivr.net/npm/katex@0.16`) in `Layout.astro`. Use `$...$` for inline and `$$...$$` for display math in MDX.
 - **Cloudflare Workers** static assets for hosting. Deploys on push to `main`.
 
 Deliberately zero runtime dependencies for the interactive pieces. All the linear algebra
@@ -84,14 +84,25 @@ DMARC records to prevent mail spoofing.
 
 ## Current state
 
-The site is still the Astro starter template. `src/content/blog/` does not exist yet — it
-will be created when the first article is ready. `src/components/Welcome.astro` and
-`src/assets/` are starter scaffolding and will be replaced. `src/layouts/Layout.astro` is
-the base HTML shell (currently unstyled).
+The LDA article (`src/content/blog/lda.mdx`) is the first real article and is in progress.
+The starter scaffolding (`Welcome.astro`, `src/assets/`) has been removed. Active components
+are `src/components/PCAScatter.astro` and `src/components/LDAClassBuilder.astro`.
+`src/layouts/Layout.astro` is the base HTML shell with global CSS custom properties and
+KaTeX stylesheet.
 
 ## Content conventions
 
-Articles live in `src/content/blog/` as `.mdx`. Widgets live in `src/components/`.
+Articles live in `src/content/blog/` as `.mdx` and are served at `/blog/{filename}`.
+Widgets live in `src/components/`.
+
+Required frontmatter (schema enforced in `src/content.config.ts`):
+
+```yaml
+title: string
+description: string
+pubDate: date          # coerced — YYYY-MM-DD works
+draft: boolean         # optional, default false; draft: true hides from index and build
+```
 
 Structure articles as: build the reader's intuition with a manipulable widget first, then
 give the derivation, then show where the method **fails**. The failure section is not an
@@ -110,7 +121,10 @@ Every interactive component follows the same shape. Match it when adding new one
   so multiple instances on one page work independently.
 - Read colors through CSS custom properties defined on the root element, via
   `getComputedStyle`. Never hardcode hex values in the drawing code — the widgets must
-  work in both light and dark mode.
+  work in both light and dark mode. Tokens defined in `Layout.astro`:
+  `--color-bg`, `--color-surface`, `--color-border`, `--color-text`, `--color-text-muted`,
+  `--color-data-1` (blue/steel), `--color-data-2` (orange/red), `--color-axis`,
+  `--color-widget-bg`, `--color-widget-border`.
 - Handle `devicePixelRatio` in canvas setup or output looks blurry on retina displays.
 - Re-render on `resize` and on `prefers-color-scheme` change.
 - Provide `aria-label` on every canvas describing what it depicts.

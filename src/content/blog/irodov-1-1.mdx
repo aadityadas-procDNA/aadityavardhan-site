@@ -1,0 +1,59 @@
+---
+title: "Irodov 1.1: Why the Boat Speed Doesn't Matter"
+description: "A boat passes a raft, travels downstream for time T, turns around, and meets the raft again at distance l. The river speed is u = l/2T — the engine speed cancels completely. One reference-frame switch makes this obvious."
+pubDate: 2026-08-16
+draft: false
+---
+
+import IrodovBoat from '../../components/IrodovBoat.astro';
+
+## The problem
+
+> A motorboat going downstream passes a raft at point A. After $\tau = 60\,\text{min}$ the boat turns around and, after some further time, passes the raft again at a point $l = 6.0\,\text{km}$ from A. The engine speed (relative to water) is constant throughout. Find the flow velocity $u$.
+
+The raft floats passively — it moves exactly as fast as the water. The problem gives you $\tau$ and $l$, but never specifies the engine speed $v$. That omission is the hint. The answer is
+
+$$u = \frac{l}{2\tau}$$
+
+and $v$ appears nowhere in it.
+
+## The frame argument
+
+Switch to the reference frame of the water. In this frame the raft is stationary and there is no current — the water frame is inertial and there is no time dilation, so clocks in both frames agree.
+
+In the water frame:
+
+- **Phase 1.** The boat moves downstream at speed $v$ for time $\tau$, reaching a distance $v\tau$ from the raft.
+- **Phase 2.** The boat turns around and moves upstream at the same speed $v$ (same engine, no current in this frame). It must cover the same distance $v\tau$ back to the raft, which takes exactly another $\tau$.
+
+Total elapsed time: $2\tau$. During those $2\tau$ the raft has been carried downstream by the river at speed $u$, traveling a distance $l = u \cdot 2\tau$. Therefore
+
+$$\boxed{u = \frac{l}{2\tau} = \frac{6.0\,\text{km}}{2 \times 1\,\text{h}} = 3.0\,\text{km/h}}$$
+
+The quantity $v\tau$ — how far the boat got from the raft — appeared and disappeared. Phase 1 produced it; phase 2 consumed it exactly, because the speed and the target distance are the same. The engine speed has no route into the answer.
+
+## Verification in the lab frame
+
+Let the current run in the $+x$ direction. The boat needs $v > u$ to make upstream headway after turning.
+
+**Phase 1** (downstream, duration $\tau$): boat velocity $= v + u$, raft velocity $= u$.
+
+At $t = \tau$: boat is at $(v + u)\tau$, raft is at $u\tau$.
+
+**Phase 2** (upstream, duration $t_2$): boat velocity $= -(v - u) + 2u\tau$... rather than carry the algebra, set positions equal at $t = \tau + t_2$:
+
+$$\underbrace{(v+u)\tau - (v-u)t_2}_{\text{boat}} = \underbrace{u(\tau + t_2)}_{\text{raft}}$$
+
+Expand: $v\tau + u\tau - vt_2 + ut_2 = u\tau + ut_2$. The $u\tau$ and $ut_2$ terms cancel on both sides, leaving $v\tau = vt_2$, so $t_2 = \tau$.
+
+The total time is again $2\tau$ and the raft displacement is $u \cdot 2\tau = l$. The algebra forced $v$ to cancel — the frame argument explains *why* it had to.
+
+## Interactive
+
+The widget below fixes $u = 1.5$, $T = 1$, $l = 3.0$ and lets you vary $v$. The left panel shows the $x$-$t$ diagram from the river bank: the boat's peak shifts up and down as $v$ changes, but the filled dot — where the boat meets the raft — stays fixed. The right panel shows the water frame: the raft is flat, the boat V grows and shrinks, and the V always closes back to zero at $t = 2T$.
+
+<IrodovBoat />
+
+The readout confirms: $u = l/2T = 1.5$, regardless of where you put the slider.
+
+The river bank only ever measures two things: the time interval between meetings, and the raft's displacement at the second meeting. The engine speed is invisible to any observer who stays on the bank — and the result shows it was never needed.

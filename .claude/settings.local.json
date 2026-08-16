@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"^katex$\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('peerDependencies', {}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('version:', d['version']\\)\")",
+      "Bash(xargs grep:*)",
+      "Bash(npm show:*)",
+      "Bash(python3 -c \"import sys,json; v=json.load\\(sys.stdin\\); print\\('latest:', v[-1]\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); exp=d.get\\('exports',{}\\); print\\([k for k in exp.keys\\(\\) if 'zod' in k]\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d['exports']['./zod'], indent=2\\)\\)\")",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(node -e \"const m = require\\('./node_modules/@astrojs/markdown-remark/dist/index.js'\\); console.log\\(Object.keys\\(m\\)\\)\")",
+      "Bash(node:*)",
+      "Bash(curl -s http://localhost:4321/)",
+      "Bash(curl -s http://localhost:4321/blog/lda/)",
+      "Bash(python -c ':*)"
+    ]
+  }
+}
